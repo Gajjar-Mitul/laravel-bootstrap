@@ -248,3 +248,23 @@ fi
 sudo systemctl reload nginx
 
 echo "✅ SSL configured"
+
+echo ""
+echo "🎉 Laravel project is ready!"
+echo ""
+echo "Project details:"
+echo "  📁 Path      : $PROJECT_PATH"
+echo "  🌐 URL       : https://$DOMAIN"
+echo "  🐘 PHP       : $PHP_VERSION"
+echo "  🗄️ Database  : $DB_NAME"
+echo ""
+
+if command -v xdg-open >/dev/null 2>&1; then
+  echo "🌍 Opening browser..."
+  xdg-open "https://$DOMAIN" >/dev/null 2>&1 || true
+else
+  echo "ℹ️ Please open https://$DOMAIN manually"
+fi
+
+echo ""
+echo "✅ Done."
