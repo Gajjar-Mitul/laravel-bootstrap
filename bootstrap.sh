@@ -1,21 +1,27 @@
 #!/usr/bin/env bash
 set -e
 
+# ============================================================
+# Laravel Bootstrap Script
+# ============================================================
 # Usage:
 # ./bootstrap.sh --name=my-app [--domain=my-app.local] [--php=8.3]
+#
+# What this script does (high level):
+#  1. Parse and validate CLI arguments
+#  2. Validate system dependencies
+#  3. Create a new Laravel project
+#  4. Configure Laravel environment
+#  5. Create MySQL database
+#  6. Configure local domain & nginx
+#  7. Enable HTTPS
+#  8. Open project in browser
+# ============================================================
 
-# 1. Parse arguments (--name, --domain, --php)
-# 2. Validate required inputs
-# 3. Resolve defaults
-# 4. Validate dependencies (nginx, php-fpm, composer, mysql)
-# 5. Create Laravel project
-# 6. Fix permissions
-# 7. Create database
-# 8. Add hosts entry
-# 9. Generate SSL cert
-# 10. Create nginx vhost
-# 11. Reload nginx
-# 12. Open browser
+
+# ============================================================
+# STEP 1 — Parse CLI arguments
+# ============================================================
 
 NAME=""
 DOMAIN=""
@@ -42,6 +48,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+
+# ============================================================
+# STEP 2 — Validate required inputs & resolve defaults
+# ============================================================
+
 if [[ -z "$NAME" ]]; then
   echo "❌ --name is required"
   exit 1
@@ -55,6 +66,10 @@ echo "  Project name : $NAME"
 echo "  Domain       : $DOMAIN"
 echo "  PHP version  : $PHP_VERSION"
 
+
+# ============================================================
+# STEP 3 — Validate system dependencies
+# ============================================================
 
 echo ""
 echo "🔍 Checking system dependencies..."
@@ -74,10 +89,11 @@ command -v mysql >/dev/null 2>&1 || {
   exit 1
 }
 
-if ! sudo -n true 2>/dev/null; then
-  echo "❌ sudo access is required to modify hosts and nginx config."
+echo "🔐 This script requires sudo access for hosts and nginx configuration."
+sudo -v || {
+  echo "❌ sudo authentication failed."
   exit 1
-fi
+}
 
 PHP_FPM_SOCK="/run/php/php${PHP_VERSION}-fpm.sock"
 
@@ -88,6 +104,11 @@ if [[ ! -S "$PHP_FPM_SOCK" ]]; then
 fi
 
 echo "✅ All dependencies satisfied."
+
+
+# ============================================================
+# STEP 4 — Create project directory & install Laravel
+# ============================================================
 
 echo ""
 echo "📁 Creating project directory..."
@@ -103,9 +124,20 @@ fi
 mkdir -p "$PROJECT_PATH"
 
 echo "🚀 Installing Laravel..."
+composer create-project --prefer-dist laravel/laravel "$PROJECT_PATH" --no-scripts
 
-composer create-project --prefer-dist laravel/laravel "$PROJECT_PATH"
 
+
+# Disable Laravel default SQLite configuration (Laravel 12+)
+if grep -q "^DB_CONNECTION=sqlite" "$PROJECT_PATH/.env"; then
+  sed -i "s|^DB_CONNECTION=sqlite|DB_CONNECTION=mysql|g" "$PROJECT_PATH/.env"
+fi
+
+# ============================================================
+# STEP 5 — Fix file & directory permissions
+# ============================================================
+
+echo ""
 echo "🔐 Fixing permissions..."
 
 sudo chown -R "$USER:$USER" "$PROJECT_PATH"
@@ -113,6 +145,11 @@ find "$PROJECT_PATH" -type f -exec chmod 644 {} \;
 find "$PROJECT_PATH" -type d -exec chmod 755 {} \;
 
 echo "✅ Laravel project created at $PROJECT_PATH"
+
+
+# ============================================================
+# STEP 6 — Configure Laravel environment (.env + app key)
+# ============================================================
 
 echo ""
 echo "⚙️ Configuring Laravel environment..."
@@ -127,17 +164,22 @@ sed -i "s|^APP_NAME=.*|APP_NAME=\"$NAME\"|g" "$ENV_FILE"
 sed -i "s|^APP_URL=.*|APP_URL=https://$DOMAIN|g" "$ENV_FILE"
 
 echo "🔑 Generating application key..."
-
 php "$PROJECT_PATH/artisan" key:generate --force
 
 echo "✅ Laravel environment configured"
+
+
+# ============================================================
+# STEP 7 — Create MySQL database & update env config
+# ============================================================
 
 echo ""
 echo "🗄️ Creating database..."
 
 DB_NAME="${NAME//-/_}"
 
-mysql -u root -e "CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+sudo mysql -e "CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 
 echo "⚙️ Updating database configuration in .env..."
 
@@ -147,6 +189,11 @@ sed -i "s|^DB_PASSWORD=.*|DB_PASSWORD=|g" "$ENV_FILE"
 sed -i "s|^DB_HOST=.*|DB_HOST=127.0.0.1|g" "$ENV_FILE"
 
 echo "✅ Database '$DB_NAME' ready"
+
+
+# ============================================================
+# STEP 8 — Update /etc/hosts
+# ============================================================
 
 echo ""
 echo "🌐 Updating /etc/hosts..."
@@ -160,18 +207,17 @@ else
   echo "✅ Hosts entry added"
 fi
 
+
+# ============================================================
+# STEP 9 — Create nginx vhost
+# ============================================================
+
 echo ""
 echo "🧩 Creating nginx vhost..."
 
 NGINX_AVAILABLE="/etc/nginx/sites-available"
 NGINX_ENABLED="/etc/nginx/sites-enabled"
 VHOST_PATH="$NGINX_AVAILABLE/$DOMAIN"
-PHP_SOCK="/run/php/php${PHP_VERSION}-fpm.sock"
-
-if [[ ! -S "$PHP_SOCK" ]]; then
-  echo "❌ PHP-FPM socket not found: $PHP_SOCK"
-  exit 1
-fi
 
 read -r -d '' NGINX_CONF <<EOF
 server {
@@ -191,13 +237,12 @@ server {
 
     location ~ \.php\$ {
         include snippets/fastcgi-php.conf;
-        fastcgi_pass unix:$PHP_SOCK;
+        fastcgi_pass unix:$PHP_FPM_SOCK;
     }
 }
 EOF
 
 echo "$NGINX_CONF" | sudo tee "$VHOST_PATH" >/dev/null
-
 sudo ln -sf "$VHOST_PATH" "$NGINX_ENABLED/$DOMAIN"
 
 sudo nginx -t || {
@@ -206,8 +251,12 @@ sudo nginx -t || {
 }
 
 sudo systemctl reload nginx
-
 echo "✅ nginx vhost created"
+
+
+# ============================================================
+# STEP 10 — Generate SSL certificate
+# ============================================================
 
 echo ""
 echo "🔐 Setting up SSL certificate..."
@@ -219,18 +268,12 @@ KEY_PATH="$SSL_KEY_DIR/$NAME.key"
 
 sudo mkdir -p "$SSL_CERT_DIR" "$SSL_KEY_DIR"
 
-if [[ -f "$CERT_PATH" && -f "$KEY_PATH" ]]; then
-  echo "ℹ️ SSL certificate already exists"
-else
+if [[ ! -f "$CERT_PATH" || ! -f "$KEY_PATH" ]]; then
   if command -v mkcert >/dev/null 2>&1; then
     echo "🔒 Using mkcert for trusted local SSL"
-    TMP_CERT="/tmp/$NAME.crt"
-    TMP_KEY="/tmp/$NAME.key"
-
-    mkcert -cert-file "$TMP_CERT" -key-file "$TMP_KEY" "$DOMAIN"
-
-    sudo mv "$TMP_CERT" "$CERT_PATH"
-    sudo mv "$TMP_KEY" "$KEY_PATH"
+    mkcert -cert-file "/tmp/$NAME.crt" -key-file "/tmp/$NAME.key" "$DOMAIN"
+    sudo mv "/tmp/$NAME.crt" "$CERT_PATH"
+    sudo mv "/tmp/$NAME.key" "$KEY_PATH"
   else
     echo "⚠️ mkcert not found, generating self-signed certificate"
     sudo openssl req -x509 -nodes -days 365 \
@@ -245,8 +288,12 @@ else
 fi
 
 sudo systemctl reload nginx
-
 echo "✅ SSL configured"
+
+
+# ============================================================
+# STEP 11 — Final output & open browser
+# ============================================================
 
 echo ""
 echo "🎉 Laravel project is ready!"
