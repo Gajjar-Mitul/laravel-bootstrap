@@ -114,3 +114,22 @@ find "$PROJECT_PATH" -type f -exec chmod 644 {} \;
 find "$PROJECT_PATH" -type d -exec chmod 755 {} \;
 
 echo "✅ Laravel project created at $PROJECT_PATH"
+
+echo ""
+echo "⚙️ Configuring Laravel environment..."
+
+ENV_FILE="$PROJECT_PATH/.env"
+
+if [[ ! -f "$ENV_FILE" ]]; then
+  cp "$PROJECT_PATH/.env.example" "$ENV_FILE"
+fi
+
+sed -i "s|^APP_NAME=.*|APP_NAME=\"$NAME\"|g" "$ENV_FILE"
+sed -i "s|^APP_URL=.*|APP_URL=https://$DOMAIN|g" "$ENV_FILE"
+
+echo "🔑 Generating application key..."
+
+php "$PROJECT_PATH/artisan" key:generate --force
+
+echo "✅ Laravel environment configured"
+
