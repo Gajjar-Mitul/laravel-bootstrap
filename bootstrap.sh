@@ -2,6 +2,55 @@
 set -e
 
 # ============================================================
+# Help / Usage
+# ============================================================
+show_help() {
+  cat <<'EOF'
+Laravel Bootstrap CLI
+
+Usage:
+  ./bootstrap.sh --name=<project-name> [options]
+
+Required:
+  --name            Project name (used for directory and database)
+
+Optional:
+  --domain          Local domain (default: <name>.local)
+  --php             PHP version (default: 8.3)
+  --help            Show this help message
+
+Description:
+  Instantly bootstrap a Laravel project on Linux with:
+  - nginx vhost
+  - SSL (mkcert if available)
+  - MySQL database
+  - PHP-FPM configuration
+
+Requirements:
+  - Linux (Ubuntu recommended)
+  - nginx
+  - PHP + PHP-FPM
+  - composer
+  - mysql / mariadb
+  - sudo access
+
+Examples:
+  ./bootstrap.sh --name=my-app
+  ./bootstrap.sh --name=my-app --php=8.2
+EOF
+}
+
+# ============================================================
+# Early exit for --help
+# ============================================================
+for arg in "$@"; do
+  if [[ "$arg" == "--help" || "$arg" == "-h" ]]; then
+    show_help
+    exit 0
+  fi
+done
+
+# ============================================================
 # Laravel Bootstrap Script
 # ============================================================
 # Usage:
