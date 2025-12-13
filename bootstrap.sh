@@ -56,3 +56,37 @@ echo "  Domain       : $DOMAIN"
 echo "  PHP version  : $PHP_VERSION"
 
 exit 0
+
+echo ""
+echo "🔍 Checking system dependencies..."
+
+command -v nginx >/dev/null 2>&1 || {
+  echo "❌ nginx not found. Please install nginx first."
+  exit 1
+}
+
+command -v composer >/dev/null 2>&1 || {
+  echo "❌ composer not found. Please install composer."
+  exit 1
+}
+
+command -v mysql >/dev/null 2>&1 || {
+  echo "❌ mysql client not found."
+  exit 1
+}
+
+if ! sudo -n true 2>/dev/null; then
+  echo "❌ sudo access is required to modify hosts and nginx config."
+  exit 1
+fi
+
+PHP_FPM_SOCK="/run/php/php${PHP_VERSION}-fpm.sock"
+
+if [[ ! -S "$PHP_FPM_SOCK" ]]; then
+  echo "❌ PHP-FPM socket not found at $PHP_FPM_SOCK"
+  echo "   Is php${PHP_VERSION}-fpm installed and running?"
+  exit 1
+fi
+
+echo "✅ All dependencies satisfied."
+
