@@ -55,7 +55,6 @@ echo "  Project name : $NAME"
 echo "  Domain       : $DOMAIN"
 echo "  PHP version  : $PHP_VERSION"
 
-exit 0
 
 echo ""
 echo "🔍 Checking system dependencies..."
