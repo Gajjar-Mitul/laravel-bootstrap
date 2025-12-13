@@ -160,3 +160,52 @@ else
   echo "$HOSTS_ENTRY" | sudo tee -a /etc/hosts >/dev/null
   echo "✅ Hosts entry added"
 fi
+
+echo ""
+echo "🧩 Creating nginx vhost..."
+
+NGINX_AVAILABLE="/etc/nginx/sites-available"
+NGINX_ENABLED="/etc/nginx/sites-enabled"
+VHOST_PATH="$NGINX_AVAILABLE/$DOMAIN"
+PHP_SOCK="/run/php/php${PHP_VERSION}-fpm.sock"
+
+if [[ ! -S "$PHP_SOCK" ]]; then
+  echo "❌ PHP-FPM socket not found: $PHP_SOCK"
+  exit 1
+fi
+
+read -r -d '' NGINX_CONF <<EOF
+server {
+    listen 80;
+    listen 443 ssl;
+    server_name $DOMAIN;
+
+    root $PROJECT_PATH/public;
+    index index.php index.html;
+
+    ssl_certificate     /etc/ssl/certs/$NAME.crt;
+    ssl_certificate_key /etc/ssl/private/$NAME.key;
+
+    location / {
+        try_files \$uri \$uri/ /index.php?\$query_string;
+    }
+
+    location ~ \.php\$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:$PHP_SOCK;
+    }
+}
+EOF
+
+echo "$NGINX_CONF" | sudo tee "$VHOST_PATH" >/dev/null
+
+sudo ln -sf "$VHOST_PATH" "$NGINX_ENABLED/$DOMAIN"
+
+sudo nginx -t || {
+  echo "❌ nginx config test failed"
+  exit 1
+}
+
+sudo systemctl reload nginx
+
+echo "✅ nginx vhost created"
