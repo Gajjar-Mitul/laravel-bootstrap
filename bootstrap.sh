@@ -209,3 +209,42 @@ sudo nginx -t || {
 sudo systemctl reload nginx
 
 echo "✅ nginx vhost created"
+
+echo ""
+echo "🔐 Setting up SSL certificate..."
+
+SSL_CERT_DIR="/etc/ssl/certs"
+SSL_KEY_DIR="/etc/ssl/private"
+CERT_PATH="$SSL_CERT_DIR/$NAME.crt"
+KEY_PATH="$SSL_KEY_DIR/$NAME.key"
+
+sudo mkdir -p "$SSL_CERT_DIR" "$SSL_KEY_DIR"
+
+if [[ -f "$CERT_PATH" && -f "$KEY_PATH" ]]; then
+  echo "ℹ️ SSL certificate already exists"
+else
+  if command -v mkcert >/dev/null 2>&1; then
+    echo "🔒 Using mkcert for trusted local SSL"
+    TMP_CERT="/tmp/$NAME.crt"
+    TMP_KEY="/tmp/$NAME.key"
+
+    mkcert -cert-file "$TMP_CERT" -key-file "$TMP_KEY" "$DOMAIN"
+
+    sudo mv "$TMP_CERT" "$CERT_PATH"
+    sudo mv "$TMP_KEY" "$KEY_PATH"
+  else
+    echo "⚠️ mkcert not found, generating self-signed certificate"
+    sudo openssl req -x509 -nodes -days 365 \
+      -newkey rsa:2048 \
+      -keyout "$KEY_PATH" \
+      -out "$CERT_PATH" \
+      -subj "/C=IN/ST=Local/L=Local/O=Dev/OU=Local/CN=$DOMAIN"
+  fi
+
+  sudo chmod 644 "$CERT_PATH"
+  sudo chmod 600 "$KEY_PATH"
+fi
+
+sudo systemctl reload nginx
+
+echo "✅ SSL configured"
