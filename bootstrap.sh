@@ -148,3 +148,15 @@ sed -i "s|^DB_PASSWORD=.*|DB_PASSWORD=|g" "$ENV_FILE"
 sed -i "s|^DB_HOST=.*|DB_HOST=127.0.0.1|g" "$ENV_FILE"
 
 echo "✅ Database '$DB_NAME' ready"
+
+echo ""
+echo "🌐 Updating /etc/hosts..."
+
+HOSTS_ENTRY="127.0.0.1 $DOMAIN"
+
+if grep -qE "^[[:space:]]*127\.0\.0\.1[[:space:]]+$DOMAIN(\s|$)" /etc/hosts; then
+  echo "ℹ️ Hosts entry already exists"
+else
+  echo "$HOSTS_ENTRY" | sudo tee -a /etc/hosts >/dev/null
+  echo "✅ Hosts entry added"
+fi
