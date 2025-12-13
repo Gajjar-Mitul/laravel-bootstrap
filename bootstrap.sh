@@ -16,3 +16,43 @@ set -e
 # 10. Create nginx vhost
 # 11. Reload nginx
 # 12. Open browser
+
+NAME=""
+DOMAIN=""
+PHP_VERSION=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --name=*)
+      NAME="${1#*=}"
+      shift
+      ;;
+    --domain=*)
+      DOMAIN="${1#*=}"
+      shift
+      ;;
+    --php=*)
+      PHP_VERSION="${1#*=}"
+      shift
+      ;;
+    *)
+      echo "❌ Unknown option: $1"
+      exit 1
+      ;;
+  esac
+done
+
+if [[ -z "$NAME" ]]; then
+  echo "❌ --name is required"
+  exit 1
+fi
+
+DOMAIN="${DOMAIN:-$NAME.local}"
+PHP_VERSION="${PHP_VERSION:-8.3}"
+
+echo "Resolved configuration:"
+echo "  Project name : $NAME"
+echo "  Domain       : $DOMAIN"
+echo "  PHP version  : $PHP_VERSION"
+
+exit 0
