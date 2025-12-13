@@ -133,3 +133,18 @@ php "$PROJECT_PATH/artisan" key:generate --force
 
 echo "✅ Laravel environment configured"
 
+echo ""
+echo "🗄️ Creating database..."
+
+DB_NAME="${NAME//-/_}"
+
+mysql -u root -e "CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+echo "⚙️ Updating database configuration in .env..."
+
+sed -i "s|^DB_DATABASE=.*|DB_DATABASE=$DB_NAME|g" "$ENV_FILE"
+sed -i "s|^DB_USERNAME=.*|DB_USERNAME=root|g" "$ENV_FILE"
+sed -i "s|^DB_PASSWORD=.*|DB_PASSWORD=|g" "$ENV_FILE"
+sed -i "s|^DB_HOST=.*|DB_HOST=127.0.0.1|g" "$ENV_FILE"
+
+echo "✅ Database '$DB_NAME' ready"
