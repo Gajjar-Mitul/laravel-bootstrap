@@ -90,3 +90,27 @@ fi
 
 echo "✅ All dependencies satisfied."
 
+echo ""
+echo "📁 Creating project directory..."
+
+BASE_PATH="$HOME/work/code"
+PROJECT_PATH="$BASE_PATH/$NAME"
+
+if [[ -d "$PROJECT_PATH" ]]; then
+  echo "❌ Directory already exists: $PROJECT_PATH"
+  exit 1
+fi
+
+mkdir -p "$PROJECT_PATH"
+
+echo "🚀 Installing Laravel..."
+
+composer create-project --prefer-dist laravel/laravel "$PROJECT_PATH"
+
+echo "🔐 Fixing permissions..."
+
+sudo chown -R "$USER:$USER" "$PROJECT_PATH"
+find "$PROJECT_PATH" -type f -exec chmod 644 {} \;
+find "$PROJECT_PATH" -type d -exec chmod 755 {} \;
+
+echo "✅ Laravel project created at $PROJECT_PATH"
