@@ -25,6 +25,11 @@ Doing this manually every time is slow, error-prone, and inconsistent.
 
 ---
 
+## 🎥 Demo
+
+<video src="docs/demo.webm" controls></video>
+
+
 ## What this tool does
 
 In a single command, this script:

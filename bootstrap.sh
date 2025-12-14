@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 # ============================================================
 # Help / Usage
@@ -25,18 +25,6 @@ Description:
   - SSL (mkcert if available)
   - MySQL database
   - PHP-FPM configuration
-
-Requirements:
-  - Linux (Ubuntu recommended)
-  - nginx
-  - PHP + PHP-FPM
-  - composer
-  - mysql / mariadb
-  - sudo access
-
-Examples:
-  ./bootstrap.sh --name=my-app
-  ./bootstrap.sh --name=my-app --php=8.2
 EOF
 }
 
@@ -51,234 +39,189 @@ for arg in "$@"; do
 done
 
 # ============================================================
-# Laravel Bootstrap Script
+# Parse CLI arguments
 # ============================================================
-# Usage:
-# ./bootstrap.sh --name=my-app [--domain=my-app.local] [--php=8.3]
-#
-# What this script does (high level):
-#  1. Parse and validate CLI arguments
-#  2. Validate system dependencies
-#  3. Create a new Laravel project
-#  4. Configure Laravel environment
-#  5. Create MySQL database
-#  6. Configure local domain & nginx
-#  7. Enable HTTPS
-#  8. Open project in browser
-# ============================================================
-
-
-# ============================================================
-# STEP 1 — Parse CLI arguments
-# ============================================================
-
 NAME=""
 DOMAIN=""
 PHP_VERSION=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --name=*)
-      NAME="${1#*=}"
-      shift
-      ;;
-    --domain=*)
-      DOMAIN="${1#*=}"
-      shift
-      ;;
-    --php=*)
-      PHP_VERSION="${1#*=}"
-      shift
-      ;;
-    *)
-      echo "❌ Unknown option: $1"
-      exit 1
-      ;;
+    --name=*) NAME="${1#*=}" ;;
+    --domain=*) DOMAIN="${1#*=}" ;;
+    --php=*) PHP_VERSION="${1#*=}" ;;
+    *) echo "❌ Unknown option: $1"; exit 1 ;;
   esac
+  shift
 done
 
+PHP_BIN="/usr/bin/php$PHP_VERSION"
 
-# ============================================================
-# STEP 2 — Validate required inputs & resolve defaults
-# ============================================================
-
-if [[ -z "$NAME" ]]; then
-  echo "❌ --name is required"
+if [[ ! -x "$PHP_BIN" ]]; then
+  echo "❌ PHP $PHP_VERSION binary not found at $PHP_BIN"
+  echo "👉 Install php$PHP_VERSION-cli"
   exit 1
 fi
 
+
+# ============================================================
+# Validate & defaults
+# ============================================================
+[[ -z "$NAME" ]] && { echo "❌ --name is required"; exit 1; }
+
 DOMAIN="${DOMAIN:-$NAME.local}"
 PHP_VERSION="${PHP_VERSION:-8.3}"
+
+BASE_PATH="$HOME/work/code"
+PROJECT_PATH="$BASE_PATH/$NAME"
+DB_NAME="${NAME//-/_}"
+
+PHP_FPM_SOCK="/run/php/php${PHP_VERSION}-fpm.sock"
 
 echo "Resolved configuration:"
 echo "  Project name : $NAME"
 echo "  Domain       : $DOMAIN"
 echo "  PHP version  : $PHP_VERSION"
 
+# ============================================================
+# Dependencies
+# ============================================================
+echo "🔍 Checking dependencies..."
+
+command -v nginx >/dev/null || { echo "❌ nginx not installed"; exit 1; }
+command -v composer >/dev/null || { echo "❌ composer not installed"; exit 1; }
+command -v mysql >/dev/null || { echo "❌ mysql client missing"; exit 1; }
+[[ -S "$PHP_FPM_SOCK" ]] || { echo "❌ PHP-FPM socket not found"; exit 1; }
+
+echo "🔐 Requesting sudo access..."
+sudo -v
 
 # ============================================================
-# STEP 3 — Validate system dependencies
+# Install Laravel
 # ============================================================
-
-echo ""
-echo "🔍 Checking system dependencies..."
-
-command -v nginx >/dev/null 2>&1 || {
-  echo "❌ nginx not found. Please install nginx first."
-  exit 1
-}
-
-command -v composer >/dev/null 2>&1 || {
-  echo "❌ composer not found. Please install composer."
-  exit 1
-}
-
-command -v mysql >/dev/null 2>&1 || {
-  echo "❌ mysql client not found."
-  exit 1
-}
-
-echo "🔐 This script requires sudo access for hosts and nginx configuration."
-sudo -v || {
-  echo "❌ sudo authentication failed."
-  exit 1
-}
-
-PHP_FPM_SOCK="/run/php/php${PHP_VERSION}-fpm.sock"
-
-if [[ ! -S "$PHP_FPM_SOCK" ]]; then
-  echo "❌ PHP-FPM socket not found at $PHP_FPM_SOCK"
-  echo "   Is php${PHP_VERSION}-fpm installed and running?"
-  exit 1
-fi
-
-echo "✅ All dependencies satisfied."
-
-
-# ============================================================
-# STEP 4 — Create project directory & install Laravel
-# ============================================================
-
-echo ""
 echo "📁 Creating project directory..."
-
-BASE_PATH="$HOME/work/code"
-PROJECT_PATH="$BASE_PATH/$NAME"
-
-if [[ -d "$PROJECT_PATH" ]]; then
-  echo "❌ Directory already exists: $PROJECT_PATH"
-  exit 1
-fi
-
+[[ -d "$PROJECT_PATH" ]] && { echo "❌ Directory exists"; exit 1; }
 mkdir -p "$PROJECT_PATH"
 
 echo "🚀 Installing Laravel..."
-composer create-project --prefer-dist laravel/laravel "$PROJECT_PATH" --no-scripts
+"$PHP_BIN" "$(command -v composer)" create-project laravel/laravel "$PROJECT_PATH"
 
-
-
-# Disable Laravel default SQLite configuration (Laravel 12+)
-if grep -q "^DB_CONNECTION=sqlite" "$PROJECT_PATH/.env"; then
-  sed -i "s|^DB_CONNECTION=sqlite|DB_CONNECTION=mysql|g" "$PROJECT_PATH/.env"
-fi
-
-# ============================================================
-# STEP 5 — Fix file & directory permissions
-# ============================================================
-
-echo ""
 echo "🔐 Fixing permissions..."
 
 sudo chown -R "$USER:$USER" "$PROJECT_PATH"
-find "$PROJECT_PATH" -type f -exec chmod 644 {} \;
-find "$PROJECT_PATH" -type d -exec chmod 755 {} \;
 
-echo "✅ Laravel project created at $PROJECT_PATH"
+sudo chown -R www-data:www-data \
+  "$PROJECT_PATH/storage" \
+  "$PROJECT_PATH/bootstrap/cache"
+
+sudo chmod -R 775 \
+  "$PROJECT_PATH/storage" \
+  "$PROJECT_PATH/bootstrap/cache"
 
 
 # ============================================================
-# STEP 6 — Configure Laravel environment (.env + app key)
+# Laravel env
 # ============================================================
-
-echo ""
-echo "⚙️ Configuring Laravel environment..."
-
 ENV_FILE="$PROJECT_PATH/.env"
 
+# Ensure .env exists
 if [[ ! -f "$ENV_FILE" ]]; then
   cp "$PROJECT_PATH/.env.example" "$ENV_FILE"
 fi
 
-sed -i "s|^APP_NAME=.*|APP_NAME=\"$NAME\"|g" "$ENV_FILE"
-sed -i "s|^APP_URL=.*|APP_URL=https://$DOMAIN|g" "$ENV_FILE"
+# Basic app config
+sed -i "s|^APP_NAME=.*|APP_NAME=\"$NAME\"|" "$ENV_FILE"
+sed -i "s|^APP_URL=.*|APP_URL=https://$DOMAIN|" "$ENV_FILE"
 
-echo "🔑 Generating application key..."
-php "$PROJECT_PATH/artisan" key:generate --force
+# Force safe local defaults
+sed -i "s|^SESSION_DRIVER=.*|SESSION_DRIVER=file|" "$ENV_FILE"
+sed -i "s|^CACHE_STORE=.*|CACHE_STORE=file|" "$ENV_FILE"
+sed -i "s|^QUEUE_CONNECTION=.*|QUEUE_CONNECTION=sync|" "$ENV_FILE"
 
-echo "✅ Laravel environment configured"
-
+# Generate key using selected PHP version
+"$PHP_BIN" "$PROJECT_PATH/artisan" key:generate --force
 
 # ============================================================
-# STEP 7 — Create MySQL database & update env config
+# Database
 # ============================================================
-
-echo ""
 echo "🗄️ Creating database..."
+sudo mysql -e "CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4;"
 
-DB_NAME="${NAME//-/_}"
-
-
-sudo mysql -e "CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-
-echo "⚙️ Updating database configuration in .env..."
-
-sed -i "s|^DB_DATABASE=.*|DB_DATABASE=$DB_NAME|g" "$ENV_FILE"
-sed -i "s|^DB_USERNAME=.*|DB_USERNAME=root|g" "$ENV_FILE"
-sed -i "s|^DB_PASSWORD=.*|DB_PASSWORD=|g" "$ENV_FILE"
-sed -i "s|^DB_HOST=.*|DB_HOST=127.0.0.1|g" "$ENV_FILE"
-
-echo "✅ Database '$DB_NAME' ready"
-
+sed -i "s|^DB_CONNECTION=.*|DB_CONNECTION=mysql|" "$ENV_FILE"
+sed -i "s|^DB_DATABASE=.*|DB_DATABASE=$DB_NAME|" "$ENV_FILE"
+sed -i "s|^DB_USERNAME=.*|DB_USERNAME=root|" "$ENV_FILE"
+sed -i "s|^DB_PASSWORD=.*|DB_PASSWORD=|" "$ENV_FILE"
 
 # ============================================================
-# STEP 8 — Update /etc/hosts
+# Hosts
 # ============================================================
+echo "🌐 Updating hosts..."
+grep -q "$DOMAIN" /etc/hosts || echo "127.0.0.1 $DOMAIN" | sudo tee -a /etc/hosts >/dev/null
 
-echo ""
-echo "🌐 Updating /etc/hosts..."
+# ============================================================
+# SSL (FIXED, SAFE LOCATION)
+# ============================================================
+echo "🔐 Generating SSL certificate..."
 
-HOSTS_ENTRY="127.0.0.1 $DOMAIN"
+SSL_DIR="/etc/nginx/ssl"
+CERT_PATH="$SSL_DIR/$NAME.crt"
+KEY_PATH="$SSL_DIR/$NAME.key"
 
-if grep -qE "^[[:space:]]*127\.0\.0\.1[[:space:]]+$DOMAIN(\s|$)" /etc/hosts; then
-  echo "ℹ️ Hosts entry already exists"
-else
-  echo "$HOSTS_ENTRY" | sudo tee -a /etc/hosts >/dev/null
-  echo "✅ Hosts entry added"
+TMP_CERT="/tmp/$NAME.crt"
+TMP_KEY="/tmp/$NAME.key"
+
+sudo mkdir -p "$SSL_DIR"
+
+if [[ ! -f "$CERT_PATH" || ! -f "$KEY_PATH" ]]; then
+  if command -v mkcert >/dev/null 2>&1; then
+    echo "🔒 Using mkcert for trusted local SSL"
+    mkcert -cert-file "$TMP_CERT" -key-file "$TMP_KEY" "$DOMAIN"
+  else
+    echo "⚠️ mkcert not found, generating self-signed certificate"
+    sudo openssl req -x509 -nodes -days 365 \
+      -newkey rsa:2048 \
+      -keyout "$TMP_KEY" \
+      -out "$TMP_CERT" \
+      -subj "/CN=$DOMAIN"
+  fi
+
+  [[ -f "$TMP_CERT" && -f "$TMP_KEY" ]] || {
+    echo "❌ SSL temp files not created"
+    exit 1
+  }
+
+  sudo mv "$TMP_CERT" "$CERT_PATH"
+  sudo mv "$TMP_KEY" "$KEY_PATH"
+
+  sudo chmod 644 "$CERT_PATH"
+  sudo chmod 600 "$KEY_PATH"
 fi
 
+[[ -f "$CERT_PATH" && -f "$KEY_PATH" ]] || {
+  echo "❌ SSL generation failed"
+  exit 1
+}
+
+echo "✅ SSL ready"
 
 # ============================================================
-# STEP 9 — Create nginx vhost
+# nginx vhost (NOW SAFE)
 # ============================================================
-
-echo ""
 echo "🧩 Creating nginx vhost..."
 
-NGINX_AVAILABLE="/etc/nginx/sites-available"
-NGINX_ENABLED="/etc/nginx/sites-enabled"
-VHOST_PATH="$NGINX_AVAILABLE/$DOMAIN"
+VHOST="/etc/nginx/sites-available/$DOMAIN"
 
-read -r -d '' NGINX_CONF <<EOF
+sudo tee "$VHOST" >/dev/null <<EOF
 server {
     listen 80;
-    listen 443 ssl;
+    listen 443 ssl http2;
     server_name $DOMAIN;
 
     root $PROJECT_PATH/public;
     index index.php index.html;
 
-    ssl_certificate     /etc/ssl/certs/$NAME.crt;
-    ssl_certificate_key /etc/ssl/private/$NAME.key;
+    ssl_certificate     /etc/nginx/ssl/$NAME.crt;
+    ssl_certificate_key /etc/nginx/ssl/$NAME.key;
 
     location / {
         try_files \$uri \$uri/ /index.php?\$query_string;
@@ -291,75 +234,15 @@ server {
 }
 EOF
 
-echo "$NGINX_CONF" | sudo tee "$VHOST_PATH" >/dev/null
-sudo ln -sf "$VHOST_PATH" "$NGINX_ENABLED/$DOMAIN"
+sudo ln -sf "$VHOST" /etc/nginx/sites-enabled/$DOMAIN
 
-sudo nginx -t || {
-  echo "❌ nginx config test failed"
-  exit 1
-}
-
+sudo nginx -t
 sudo systemctl reload nginx
-echo "✅ nginx vhost created"
-
 
 # ============================================================
-# STEP 10 — Generate SSL certificate
+# Done
 # ============================================================
+echo "🎉 Laravel project ready!"
+echo "🌐 https://$DOMAIN"
 
-echo ""
-echo "🔐 Setting up SSL certificate..."
-
-SSL_CERT_DIR="/etc/ssl/certs"
-SSL_KEY_DIR="/etc/ssl/private"
-CERT_PATH="$SSL_CERT_DIR/$NAME.crt"
-KEY_PATH="$SSL_KEY_DIR/$NAME.key"
-
-sudo mkdir -p "$SSL_CERT_DIR" "$SSL_KEY_DIR"
-
-if [[ ! -f "$CERT_PATH" || ! -f "$KEY_PATH" ]]; then
-  if command -v mkcert >/dev/null 2>&1; then
-    echo "🔒 Using mkcert for trusted local SSL"
-    mkcert -cert-file "/tmp/$NAME.crt" -key-file "/tmp/$NAME.key" "$DOMAIN"
-    sudo mv "/tmp/$NAME.crt" "$CERT_PATH"
-    sudo mv "/tmp/$NAME.key" "$KEY_PATH"
-  else
-    echo "⚠️ mkcert not found, generating self-signed certificate"
-    sudo openssl req -x509 -nodes -days 365 \
-      -newkey rsa:2048 \
-      -keyout "$KEY_PATH" \
-      -out "$CERT_PATH" \
-      -subj "/C=IN/ST=Local/L=Local/O=Dev/OU=Local/CN=$DOMAIN"
-  fi
-
-  sudo chmod 644 "$CERT_PATH"
-  sudo chmod 600 "$KEY_PATH"
-fi
-
-sudo systemctl reload nginx
-echo "✅ SSL configured"
-
-
-# ============================================================
-# STEP 11 — Final output & open browser
-# ============================================================
-
-echo ""
-echo "🎉 Laravel project is ready!"
-echo ""
-echo "Project details:"
-echo "  📁 Path      : $PROJECT_PATH"
-echo "  🌐 URL       : https://$DOMAIN"
-echo "  🐘 PHP       : $PHP_VERSION"
-echo "  🗄️ Database  : $DB_NAME"
-echo ""
-
-if command -v xdg-open >/dev/null 2>&1; then
-  echo "🌍 Opening browser..."
-  xdg-open "https://$DOMAIN" >/dev/null 2>&1 || true
-else
-  echo "ℹ️ Please open https://$DOMAIN manually"
-fi
-
-echo ""
-echo "✅ Done."
+command -v xdg-open >/dev/null && xdg-open "https://$DOMAIN" >/dev/null 2>&1 || true
