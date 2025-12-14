@@ -27,8 +27,7 @@ Doing this manually every time is slow, error-prone, and inconsistent.
 
 ## 🎥 Demo
 
-<video src="docs/demo.webm" controls></video>
-
+<video src="https://github.com/user-attachments/assets/bddfec33-b8cd-4316-8c92-186c74a9eafc" controls></video>
 
 ## What this tool does
 
