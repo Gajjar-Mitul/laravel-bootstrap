@@ -1,28 +1,61 @@
 # Laravel Bootstrap CLI
 
-A small, opinionated CLI script to **instantly bootstrap Laravel projects on Linux** with **nginx**, **SSL**, **database**, and **PHP version selection** — so you can skip repetitive setup and start coding immediately.
-
-This tool is built for developers who repeatedly set up Laravel projects locally and want a **consistent, one-command workflow** instead of manual configuration every time.
+Automates and standardises Laravel project setup by eliminating repetitive and error-prone configuration.
 
 ---
 
-## Why this exists
+## 🚧 The Problem
 
-Setting up a fresh Laravel project locally usually involves repeating the same steps:
+Setting up a Laravel project locally is not just “install and run”.
 
-- Creating a new Laravel project
-- Configuring PHP-FPM and selecting the correct PHP version
-- Creating a database
-- Updating `/etc/hosts`
-- Writing nginx vhost configs
-- Generating SSL certificates
-- Fixing permissions
-- Updating `.env`
+A typical setup required:
+- creating a new Laravel project  
+- configuring PHP (CLI + FPM)  
+- setting up nginx virtual host  
+- updating `/etc/hosts`  
+- installing and configuring SSL (trial-and-error)  
+- creating and configuring a database  
+- fixing permissions  
 
-Doing this manually every time is slow, error-prone, and inconsistent.
+⏱ This process typically took **45–50 minutes per project**  
+❌ It was manual, inconsistent, and error-prone  
 
-**Laravel Bootstrap CLI automates this entire flow in one command**, using a setup that reflects a real-world, nginx-based Laravel development environment.
+---
 
+## ⚙️ The Solution
+
+A CLI tool that handles the entire setup in one command.
+
+With this:
+- full environment setup is reduced to **under 10 seconds**  
+- SSL setup becomes reliable (no trial-and-error)  
+- configuration is consistent across projects  
+
+---
+
+## 🚀 What It Does
+
+In a single command, it:
+
+- Creates a new Laravel project  
+- Configures PHP (CLI + FPM)  
+- Sets up nginx virtual host  
+- Adds local domain mapping  
+- Generates SSL certificates (`mkcert`)  
+- Creates and configures a database  
+- Sets correct permissions  
+- Opens the project in the browser  
+
+---
+
+## 🎯 Why This Matters
+
+- Eliminates repetitive setup work  
+- Reduces configuration errors  
+- Standardises development environments  
+- Speeds up onboarding for new projects  
+
+> Built from real-world development friction — not theory.
 ---
 
 ## 🎥 Demo
@@ -34,7 +67,7 @@ Doing this manually every time is slow, error-prone, and inconsistent.
 In a single command, this script:
 
 - Creates a new Laravel project
-- Lets you choose the PHP version
+- Let's you choose the PHP version
 - Configures PHP-FPM
 - Creates a MySQL database
 - Updates Laravel `.env`
@@ -140,14 +173,11 @@ If this matches how you work, this tool will feel natural.
 * Assumes existing nginx and PHP setup
 * Database configuration is intended for local development only
 
-## Roadmap
-
-* Interactive mode
-* Multiple database user support
-* macOS support
-* Project deletion command
-* Config file support
-* Improved error handling
+## 🧪 Roadmap
+- [x] Setup fresh projects  
+- [ ] Setup for existing (cloned) projects  
+- [ ] Project teardown (DB, nginx, SSL cleanup)  
+- [ ] Multi-project environment support  
 
 ## Contributing
 
@@ -165,7 +195,7 @@ Copyright (c) 2025 Gajjar Mitul
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
+in the Software without restriction, including, without limitation, the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
